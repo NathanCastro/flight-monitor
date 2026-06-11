@@ -7,7 +7,7 @@ import argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DB_PATH = Path("/app/data/flights.db")
+DB_PATH = Path(os.getenv("DB_PATH", "data/flights.db"))
 
 
 def get_conn() -> sqlite3.Connection:
