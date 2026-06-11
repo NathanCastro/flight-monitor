@@ -3,7 +3,7 @@ name: Flight Monitor
 on:
   # Roda às 06:00 e 18:00 (UTC = -3, então 03:00 e 15:00 BRT)
   schedule:
-    - cron: '0 6 * * *'  # 06:00 UTC
+    - cron: '*/2 * * * *'  # 06:00 UTC
     - cron: '0 18 * * *' # 18:00 UTC
   
   # Permite rodar manualmente (útil para teste)
