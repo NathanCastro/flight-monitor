@@ -1,0 +1,76 @@
+name: Flight Monitor
+
+on:
+  # Roda às 06:00 e 18:00 (UTC = -3, então 03:00 e 15:00 BRT)
+  schedule:
+    - cron: '0 6 * * *'  # 06:00 UTC
+    - cron: '0 18 * * *' # 18:00 UTC
+  
+  # Permite rodar manualmente (útil para teste)
+  workflow_dispatch:
+
+jobs:
+  flight-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      # 1. Clonar repo
+      - uses: actions/checkout@v3
+      
+      # 2. Setup Python
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      # 3. Cache de dependências (mais rápido)
+      - uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      # 4. Instalar dependências
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium
+      
+      # 5. Criar .env com secrets do GitHub
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASS=${{ secrets.SMTP_PASS }}
+          ALERT_EMAIL=${{ secrets.ALERT_EMAIL }}
+          LOG_LEVEL=INFO
+          HEADLESS=true
+          EOF
+      
+      # 6. Rodar o monitor
+      - name: Run flight monitor
+        run: python src/flight_agent.py
+      
+      # 7. Notificação de sucesso/falha (opcional)
+      - name: Send Slack notification on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "❌ Flight Monitor falhou!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Flight Monitor Error*\nRepository: ${{ github.repository }}\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
