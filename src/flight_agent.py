@@ -34,8 +34,8 @@ from database import (
 )
 from price_analyzer import analyze, RouteResult
 from notifier import send_alert
-import scrapers.skyscanner as sky_scraper
-import scrapers.google_flights as gf_scraper
+from scrapers.skyscanner import scrape as sky_scraper_scrape
+from scrapers.google_flights import scrape as gf_scraper_scrape
 
 # ── Logging ────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -72,12 +72,12 @@ async def fetch_price(route: dict, passengers: int) -> tuple[float | None, str]:
     prices = {}
 
     if scraper_cfg in ("skyscanner", "both"):
-        p = await sky_scraper.scrape(origin, destination, date, passengers)
+        p = await sky_scraper_scrape(origin, destination, date, passengers)
         if p:
             prices["skyscanner"] = p
 
     if scraper_cfg in ("google_flights", "both"):
-        p = await gf_scraper.scrape(origin, destination, date, passengers)
+        p = await gf_scraper_scrape(origin, destination, date, passengers)
         if p:
             prices["google_flights"] = p
 
