@@ -2,6 +2,7 @@
 database.py — Gerencia o histórico de preços e alertas enviados.
 """
 
+import os
 import sqlite3
 import argparse
 from datetime import datetime, timedelta
