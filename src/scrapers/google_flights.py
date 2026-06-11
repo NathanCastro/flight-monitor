@@ -1,83 +1,67 @@
 """
-google_flights.py — Scraper do Google Flights para preços de passagens.
+google_flights.py — Scraper do Google Flights.
 """
 
 import logging
 from datetime import datetime
-from .base import new_stealth_page, random_delay, parse_price, launch_browser
+from playwright.async_api import async_playwright
 
 logger = logging.getLogger(__name__)
 
-PRICE_SELECTORS = [
-    '[aria-label*="R$"]',
-    '[aria-label*="BRL"]',
-    '.YMlIz',
-    '.U3gSDe',
-    'span[data-gs]',
-    '[class*="price"]',
-]
-
-
-def _build_url(origin: str, destination: str, date: str, passengers: int) -> str:
-    """
-    Monta URL de busca do Google Flights via query de texto.
-    date: 'YYYY-MM-DD'
-    """
-    d = datetime.strptime(date, "%Y-%m-%d")
-    date_fmt = d.strftime("%Y-%m-%d")
-    query = f"Voos+de+{origin}+para+{destination}+em+{date_fmt}"
-    return (
-        f"https://www.google.com/travel/flights/search"
-        f"?q={query}&curr=BRL&hl=pt-BR&gl=BR"
-        f"&adults={passengers}"
-    )
-
 
 async def scrape(origin: str, destination: str, date: str, passengers: int = 2) -> float | None:
-    """
-    Raspa o menor preço disponível no Google Flights para a rota/data.
-    Retorna o preço total para N passageiros, ou None em caso de falha.
-    """
-    url = _build_url(origin, destination, date, passengers)
+    import re
+    
+    d = datetime.strptime(date, "%Y-%m-%d")
+    date_fmt = d.strftime("%Y-%m-%d")
+    
     logger.info(f"[GoogleFlights] Buscando {origin}→{destination} em {date}")
 
-    pw, browser = await launch_browser()
-    try:
-        page = await new_stealth_page(browser)
-        await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-        await random_delay(3, 5)
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True, args=["--no-sandbox"])
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            viewport={"width": 1366, "height": 768},
+        )
+        page = await context.new_page()
+        
+        try:
+            url = f"https://www.google.com/travel/flights?q=Voos+de+{origin}+para+{destination}+em+{date_fmt}&curr=BRL"
+            await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            await page.wait_for_timeout(3000)
+            await page.evaluate("window.scrollBy(0, 400)")
+            await page.wait_for_timeout(2000)
 
-        # Scroll para carregar resultados
-        await page.evaluate("window.scrollBy(0, 400)")
-        await random_delay(2, 4)
-
-        prices = []
-
-        for selector in PRICE_SELECTORS:
-            try:
-                elements = await page.query_selector_all(selector)
-                for el in elements:
+            prices = []
+            elements = await page.query_selector_all("span")
+            for el in elements:
+                try:
                     text = await el.inner_text()
-                    if not text:
-                        label = await el.get_attribute("aria-label") or ""
-                        text = label
-                    price = parse_price(text)
-                    if price and 50 < price < 50_000:
-                        prices.append(price)
-            except Exception:
-                continue
+                    if "R$" in text:
+                        cleaned = re.sub(r"[^\d.,]", "", text)
+                        if "," in cleaned and "." in cleaned:
+                            cleaned = cleaned.replace(".", "").replace(",", ".")
+                        elif "," in cleaned:
+                            cleaned = cleaned.replace(",", ".")
+                        try:
+                            price = float(cleaned)
+                            if 50 < price < 50_000:
+                                prices.append(price)
+                        except ValueError:
+                            pass
+                except Exception:
+                    pass
 
-        if not prices:
-            logger.warning(f"[GoogleFlights] Nenhum preço encontrado para {origin}→{destination}")
+            if not prices:
+                logger.warning(f"[GoogleFlights] Nenhum preço encontrado para {origin}→{destination}")
+                return None
+
+            best = min(prices)
+            logger.info(f"[GoogleFlights] {origin}→{destination}: R$ {best:.2f}")
+            return best
+
+        except Exception as e:
+            logger.error(f"[GoogleFlights] Erro: {e}")
             return None
-
-        best = min(prices)
-        logger.info(f"[GoogleFlights] {origin}→{destination}: R$ {best:.2f} ({len(prices)} opções)")
-        return best
-
-    except Exception as e:
-        logger.error(f"[GoogleFlights] Erro em {origin}→{destination}: {e}")
-        return None
-    finally:
-        await browser.close()
-        await pw.__aexit__(None, None, None)
+        finally:
+            await browser.close()
