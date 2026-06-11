@@ -1,0 +1,53 @@
+# ============================================================
+# Configuração das Rotas Monitoradas
+# ============================================================
+
+passengers: 2
+
+routes:
+  - id: gig_lim
+    label: "Rio de Janeiro → Lima"
+    origin: GIG
+    destination: LIM
+    date: "2026-11-10"
+    scraper: skyscanner   # skyscanner | google_flights | both
+
+  - id: lim_cuz
+    label: "Lima → Cusco"
+    origin: LIM
+    destination: CUZ
+    date: "2026-11-15"
+    scraper: both
+
+  - id: cuz_gig
+    label: "Cusco → Rio de Janeiro"
+    origin: CUZ
+    destination: GIG
+    date: "2026-11-20"
+    scraper: skyscanner
+
+# ============================================================
+# Metas de Preço (em BRL, total para N passageiros)
+# ============================================================
+thresholds:
+  # GIG→LIM + CUZ→GIG juntos (trechos internacionais, 2 pessoas)
+  international_total: 4000
+
+  # LIM→CUZ (2 pessoas)
+  lima_cusco_both: 700
+
+  # Grand total das 3 rotas (2 pessoas)
+  grand_total: 4700
+
+# ============================================================
+# Comportamento dos alertas
+# ============================================================
+alerts:
+  # Não enviar mais de 1 alerta por rota em X horas
+  cooldown_hours: 24
+
+  # Só alertar se preço for menor que a média dos últimos N dias
+  require_below_avg_days: 7
+
+  # Enviar alerta mesmo sem histórico suficiente (primeiras coletas)
+  alert_on_first_collect: true
